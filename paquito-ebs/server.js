@@ -107,7 +107,7 @@ app.get('/extension/balance', verifyTwitchJWT, async (req, res) => {
 app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
   const userId      = getUserId(req.twitchPayload);
   const twitchName  = getTwitchName(req.twitchPayload);
-  const { item_id } = req.body;
+  const { item_id, injury_id } = req.body;
 
   if (!item_id) {
     return res.status(400).json({ error: 'Falta item_id' });
@@ -156,36 +156,43 @@ app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
       return res.status(402).json({ error: 'Saldo insuficiente (fallo en comprobación final)' });
     }
 
-    // ── 4. Insertar en consumable_queue ───────────────────────────────────────
-    const { error: queueErr } = await supabase
-      .from('consumable_queue')
-      .insert({
-        item_id:     item.id,
-        user_id:     user.id,
-        twitch_name: user.twitch_name,  // ← de la tabla, no del JWT
+    // ── 4 & 5. Efecto según tipo ─────────────────────────────────────────────
+    const isHeal = item.effect_type === 'heal_leve' || item.effect_type === 'heal_grave';
+
+    if (isHeal) {
+      // Curar la lesión elegida
+      if (injury_id) {
+        const { error: healErr } = await supabase
+          .from('runner_injury')
+          .update({ active: false })
+          .eq('id', injury_id);
+        if (healErr) console.error('[USE] heal injury error:', healErr.message);
+      }
+      // Notificar al HUD
+      await supabase.from('runner_events').insert({
+        type: 'heal',
+        data: { item_id: item.id, effect_type: item.effect_type, injury_id, twitch_name: user.twitch_name },
       });
-
-    if (queueErr) {
-      console.error('[USE] consumable_queue error:', queueErr.message);
-      // El saldo ya se descontó — seguimos igualmente
-    }
-
-    // ── 5. Insertar en runner_events (HUD reacciona) ──────────────────────────
-    const eventType = item.effect_type === 'drink' ? 'drink' : item.effect_type ?? 'item';
-
-    const { error: eventErr } = await supabase
-      .from('runner_events')
-      .insert({
-        type: eventType,
-        data: {
+    } else {
+      // Encolar consumible normal
+      const { error: queueErr } = await supabase
+        .from('consumable_queue')
+        .insert({
           item_id:     item.id,
-          effect_type: item.effect_type,
-          twitch_name: user.twitch_name,  // ← de la tabla, no del JWT,
-        },
-      });
+          user_id:     user.id,
+          twitch_name: user.twitch_name,
+        });
+      if (queueErr) console.error('[USE] consumable_queue error:', queueErr.message);
 
-    if (eventErr) {
-      console.error('[USE] runner_events error:', eventErr.message);
+      // Notificar al HUD
+      const eventType = item.effect_type === 'drink' ? 'drink' : item.effect_type ?? 'item';
+      const { error: eventErr } = await supabase
+        .from('runner_events')
+        .insert({
+          type: eventType,
+          data: { item_id: item.id, effect_type: item.effect_type, twitch_name: user.twitch_name },
+        });
+      if (eventErr) console.error('[USE] runner_events error:', eventErr.message);
     }
 
     // ── 6. Log ────────────────────────────────────────────────────────────────
@@ -211,6 +218,21 @@ app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
     return res.status(500).json({ error: 'Error interno al procesar el uso' });
   }
 });
+
+// ── GET /extension/injuries ───────────────────────────────────────────────────
+app.get('/extension/injuries', verifyTwitchJWT, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('runner_injury')
+      .select('id, zone, severity, speed_penalty')
+      .eq('active', true)
+    if (error) throw error
+    return res.json({ injuries: data || [] })
+  } catch (err) {
+    console.error('[GET /injuries]', err.message)
+    return res.status(500).json({ error: 'Error al cargar las lesiones' })
+  }
+})
 
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
