@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paquito - Tienda</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+<style>
+  :root {
+    --bg:          #0e0f14;
+    --bg2:         #16181f;
+    --bg3:         #1e2029;
+    --border:      rgba(255,255,255,0.07);
+    --accent:      #f5c97a;
+    --accent2:     #e8956d;
+    --green:       #7ecfa0;
+    --blue:        #7ec8e3;
+    --text:        rgba(255,240,210,0.92);
+    --text-dim:    rgba(255,220,170,0.55);
+    --font:        'Fredoka', sans-serif;
+    --font-body:   'Nunito', sans-serif;
+    --radius:      14px;
+    --shadow:      0 4px 20px rgba(0,0,0,0.5);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  /* ── CABECERA ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-title {
+    font-family: var(--font);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+  }
+  .header-title span { color: var(--text-dim); font-size: 14px; font-weight: 500; margin-left: 6px; }
+
+  .balance-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(245,201,122,0.1);
+    border: 1px solid rgba(245,201,122,0.2);
+    border-radius: 99px;
+    padding: 5px 12px;
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    transition: all 0.3s;
+  }
+  .balance-pill.updated {
+    background: rgba(245,201,122,0.22);
+    border-color: rgba(245,201,122,0.5);
+  }
+  .balance-icon { font-size: 14px; }
+
+  /* ── ESTADO ── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: blink 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  .status-dot.offline { background: #ff4455; box-shadow: 0 0 6px #ff4455; animation: none; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── GRID DE ITEMS ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .item-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    user-select: none;
+  }
+  .item-card:hover {
+    border-color: rgba(245,201,122,0.3);
+    background: var(--bg3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  }
+  .item-card:active { transform: scale(0.97); }
+  .item-card.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .item-card.buying {
+    pointer-events: none;
+  }
+
+  /* Shimmer de carga */
+  .item-card.skeleton {
+    pointer-events: none;
+    cursor: default;
+  }
+  .item-card.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  .item-img-wrap {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .item-img {
+    width: 80%;
+    height: 80%;
+    object-fit: contain;
+    image-rendering: pixelated;
+    transition: transform 0.2s;
+  }
+  .item-card:hover .item-img { transform: scale(1.08); }
+
+  .item-img-placeholder {
+    font-size: 36px;
+    line-height: 1;
+  }
+
+  .item-info { flex: 1; }
+  .item-name {
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: 3px;
+  }
+  .item-desc {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+
+  .item-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 2px;
+  }
+  .item-price {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .item-price.cant-afford { color: #ff6677; }
+
+  .item-btn {
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border: none;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a1200;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: 0.3px;
+    pointer-events: none; /* el click lo maneja la card */
+  }
+  .item-card:hover .item-btn { opacity: 0.9; }
+
+  /* ── FEEDBACK OVERLAY ── */
+  .item-feedback {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font);
+    font-size: 28px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .item-feedback.success {
+    background: rgba(126,207,160,0.25);
+    color: var(--green);
+    opacity: 1;
+    animation: feedbackPop 1.2s ease forwards;
+  }
+  .item-feedback.error {
+    background: rgba(255,68,85,0.2);
+    color: #ff6677;
+    opacity: 1;
+    animation: feedbackPop 1.2s ease forwards;
+  }
+  @keyframes feedbackPop {
+    0%   { opacity: 0; transform: scale(0.7); }
+    20%  { opacity: 1; transform: scale(1.1); }
+    70%  { opacity: 1; transform: scale(1.0); }
+    100% { opacity: 0; transform: scale(1.0); }
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 8px 18px;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    white-space: nowrap;
+    z-index: 100;
+    max-width: calc(100% - 24px);
+    text-align: center;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  #toast.success { border-color: rgba(126,207,160,0.4); color: var(--green); }
+  #toast.error   { border-color: rgba(255,68,85,0.4);   color: #ff6677; }
+
+  /* ── LOADING / EMPTY ── */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .empty-state .emoji { font-size: 36px; display: block; margin-bottom: 10px; }
+
+  /* ── NOT LOGGED IN ── */
+  #login-prompt {
+    display: none;
+    text-align: center;
+    padding: 32px 16px;
+  }
+  #login-prompt .emoji { font-size: 40px; margin-bottom: 12px; display: block; }
+  #login-prompt p {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 600;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  #login-prompt button {
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border: none;
+    border-radius: 10px;
+    padding: 10px 24px;
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a1200;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.1s;
+  }
+  #login-prompt button:hover { opacity: 0.9; transform: scale(1.03); }
+
+  /* ── SKELETON PLACEHOLDERS ── */
+  .skel-img  { width: 100%; aspect-ratio: 1; background: var(--bg3); border-radius: 10px; }
+  .skel-line { height: 10px; background: var(--bg3); border-radius: 99px; margin-top: 6px; }
+  .skel-line.short { width: 60%; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">🏃 Paquito <span>tienda</span></div>
+  <div class="balance-pill" id="balance-pill">
+    <span class="balance-icon">🪙</span>
+    <span id="balance-value">—</span>
+  </div>
+</div>
+
+<div class="status-bar" id="status-bar">
+  <div class="status-dot" id="status-dot"></div>
+  <span id="status-text">Conectando...</span>
+</div>
+
+<div id="login-prompt">
+  <span class="emoji">👋</span>
+  <p>Inicia sesión con Twitch<br>para usar la tienda de Paquito</p>
+  <button onclick="Twitch.ext.actions.requestIdShare()">Iniciar sesión</button>
+</div>
+
+<div id="main-content">
+  <div class="grid" id="items-grid">
+    <!-- Skeletons de carga -->
+    <div class="item-card skeleton">
+      <div class="skel-img"></div>
+      <div class="skel-line"></div>
+      <div class="skel-line short"></div>
+    </div>
+    <div class="item-card skeleton">
+      <div class="skel-img"></div>
+      <div class="skel-line"></div>
+      <div class="skel-line short"></div>
+    </div>
+    <div class="item-card skeleton">
+      <div class="skel-img"></div>
+      <div class="skel-line"></div>
+      <div class="skel-line short"></div>
+    </div>
+    <div class="item-card skeleton">
+      <div class="skel-img"></div>
+      <div class="skel-line"></div>
+      <div class="skel-line short"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────
+// Sustituye por la URL de tu EBS en producción
+const EBS_URL = 'https://b451-79-116-173-119.ngrok-free.app';
+
+// ── ESTADO ────────────────────────────────────────────────────
+let twitchToken  = null;   // JWT del viewer
+let twitchUserId = null;   // opaque user id
+let balance      = null;
+let items        = [];
+let cooldowns    = {};     // itemId → timestamp hasta el que está en cooldown
+let authorized   = false;
+
+// ── TWITCH EXT ────────────────────────────────────────────────
+// ── TWITCH EXT ────────────────────────────────────────────────
+Twitch.ext.onAuthorized(auth => {
+  twitchToken  = auth.token;
+
+  // Decodificar el payload del JWT para obtener el user_id real
+  const payload = JSON.parse(atob(auth.token.split('.')[1]));
+  
+  console.log('[AUTH] payload:', payload);
+
+  // user_id real solo existe si compartió identidad
+  const realUserId = payload.user_id;
+  twitchUserId = realUserId || payload.opaque_user_id;
+
+  if (!realUserId) {
+    showLoginPrompt();
+    return;
+  }
+
+  authorized = true;
+  document.getElementById('login-prompt').style.display = 'none';
+  document.getElementById('main-content').style.display = '';
+  init();
+});
+
+Twitch.ext.onError(err => {
+  setStatus('error', 'Error de conexión con Twitch');
+  console.error('[EXT] Error:', err);
+});
+
+// ── INIT ──────────────────────────────────────────────────────
+async function init() {
+  setStatus('loading', 'Cargando tienda...');
+  await Promise.all([loadItems(), loadBalance()]);
+  renderItems();
+  setStatus('online', 'Tienda lista');
+}
+
+// ── API CALLS ─────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${EBS_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${twitchToken}`,
+      'ngrok-skip-browser-warning': 'true',  // ← añade esto
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function loadItems() {
+  try {
+    const data = await apiFetch('/extension/items');
+    items = data.items || [];
+  } catch (e) {
+    console.error('[EXT] loadItems error:', e.message);
+    items = [];
+  }
+}
+
+async function loadBalance() {
+  try {
+    const data = await apiFetch('/extension/balance');
+    setBalance(data.balance ?? 0);
+  } catch (e) {
+    console.error('[EXT] loadBalance error:', e.message);
+    setBalance(0);
+  }
+}
+
+async function buyItem(item) {
+  const card = document.querySelector(`[data-id="${item.id}"]`);
+  if (!card) return;
+
+  // Cooldown local
+  if (cooldowns[item.id] && Date.now() < cooldowns[item.id]) {
+    const secs = Math.ceil((cooldowns[item.id] - Date.now()) / 1000);
+    showToast(`⏳ Espera ${secs}s para usar de nuevo`, 'error');
+    return;
+  }
+
+  card.classList.add('buying');
+  setStatus('loading', `Usando ${item.name}...`);
+
+  try {
+    const data = await apiFetch('/extension/use', {
+      method: 'POST',
+      body: JSON.stringify({ item_id: item.id }),
+    });
+
+    // Actualizar saldo
+    setBalance(data.balance);
+
+    // Cooldown local de 3s mínimo para evitar spam
+    cooldowns[item.id] = Date.now() + (item.cooldown_ms || 3000);
+
+    showFeedback(card, 'success', '✓');
+    showToast(`✨ ¡${item.name} usado!`, 'success');
+    setStatus('online', 'Tienda lista');
+
+    // Refrescar saldo tras un momento
+    setTimeout(loadBalance, 1500);
+  } catch (e) {
+    showFeedback(card, 'error', '✗');
+    showToast(e.message || 'No se pudo usar el ítem', 'error');
+    setStatus('online', 'Tienda lista');
+  } finally {
+    card.classList.remove('buying');
+    // Actualizar estado de botones según nuevo saldo
+    updateAffordability();
+  }
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function renderItems() {
+  const grid = document.getElementById('items-grid');
+
+  if (!items.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <span class="emoji">🛒</span>
+      No hay ítems disponibles ahora mismo
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = items.map(item => {
+    const canAfford = balance === null || balance >= item.price;
+    return `
+    <div class="item-card${canAfford ? '' : ' disabled'}" data-id="${item.id}" onclick="handleItemClick(${item.id})">
+      <div class="item-img-wrap">
+        ${item.image_url
+          ? `<img class="item-img" src="${item.image_url}" alt="${item.name}" loading="lazy" />`
+          : `<div class="item-img-placeholder">${item.icon || '🎁'}</div>`
+        }
+      </div>
+      <div class="item-info">
+        <div class="item-name">${item.name}</div>
+        ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
+      </div>
+      <div class="item-footer">
+        <div class="item-price${canAfford ? '' : ' cant-afford'}">
+          🪙 ${item.price}
+        </div>
+        <button class="item-btn">Usar</button>
+      </div>
+      <div class="item-feedback" id="feedback-${item.id}"></div>
+    </div>`;
+  }).join('');
+}
+
+function updateAffordability() {
+  items.forEach(item => {
+    const card = document.querySelector(`[data-id="${item.id}"]`);
+    if (!card) return;
+    const canAfford = balance === null || balance >= item.price;
+    card.classList.toggle('disabled', !canAfford);
+    const priceEl = card.querySelector('.item-price');
+    if (priceEl) priceEl.classList.toggle('cant-afford', !canAfford);
+  });
+}
+
+function handleItemClick(itemId) {
+  const item = items.find(i => i.id === itemId);
+  if (!item) return;
+  buyItem(item);
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────
+function setBalance(val) {
+  balance = val;
+  const el   = document.getElementById('balance-value');
+  const pill = document.getElementById('balance-pill');
+  el.textContent = val.toLocaleString('es-ES');
+  pill.classList.add('updated');
+  setTimeout(() => pill.classList.remove('updated'), 600);
+  updateAffordability();
+}
+
+function setStatus(type, text) {
+  const dot  = document.getElementById('status-dot');
+  const span = document.getElementById('status-text');
+  span.textContent = text;
+  dot.className = 'status-dot';
+  if (type === 'error')   dot.classList.add('offline');
+  if (type === 'loading') dot.style.background = '#f5c97a';
+  else dot.style.background = '';
+}
+
+let _toastTimer = null;
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+}
+
+function showFeedback(card, type, symbol) {
+  const el = document.getElementById(`feedback-${card.dataset.id}`);
+  if (!el) return;
+  el.textContent = symbol;
+  el.className = `item-feedback ${type}`;
+  setTimeout(() => { el.className = 'item-feedback'; }, 1300);
+}
+
+function showLoginPrompt() {
+  document.getElementById('login-prompt').style.display = '';
+  document.getElementById('main-content').style.display = 'none';
+  setStatus('error', 'No has iniciado sesión');
+}
+</script>
+</body>
+</html>
