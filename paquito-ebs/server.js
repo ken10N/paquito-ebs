@@ -94,6 +94,23 @@ app.get('/extension/balance', verifyTwitchJWT, async (req, res) => {
   }
 });
 
+// ── GET /extension/injuries ───────────────────────────────────────────────────
+app.get('/extension/injuries', verifyTwitchJWT, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('runner_injury')
+      .select('id, zone, severity, speed_penalty')
+      .eq('active', true)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return res.json({ injuries: data || [] });
+  } catch (err) {
+    console.error('[GET /injuries]', err.message);
+    return res.status(500).json({ error: 'Error al cargar las lesiones' });
+  }
+});
+
 // ── POST /extension/use ───────────────────────────────────────────────────────
 // Compra y usa un consumible en un solo paso (igual que useItem() en Inventory.vue):
 //
@@ -156,25 +173,25 @@ app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
       return res.status(402).json({ error: 'Saldo insuficiente (fallo en comprobación final)' });
     }
 
-    // ── 4 & 5. Efecto según tipo ─────────────────────────────────────────────
+    // ── 4 & 5. Efectos según tipo de ítem ───────────────────────────────────────
     const isHeal = item.effect_type === 'heal_leve' || item.effect_type === 'heal_grave';
 
     if (isHeal) {
-      // Curar la lesión elegida
-      if (injury_id) {
-        const { error: healErr } = await supabase
-          .from('runner_injury')
-          .update({ active: false })
-          .eq('id', injury_id);
-        if (healErr) console.error('[USE] heal injury error:', healErr.message);
+      // Curar lesión: marcar como inactiva en runner_injury
+      if (!injury_id) {
+        return res.status(400).json({ error: 'Falta injury_id para curar una lesión' });
       }
-      // Notificar al HUD
-      await supabase.from('runner_events').insert({
-        type: 'heal',
-        data: { item_id: item.id, effect_type: item.effect_type, injury_id, twitch_name: user.twitch_name },
-      });
+      const { error: healErr } = await supabase
+        .from('runner_injury')
+        .update({ active: false })
+        .eq('id', injury_id)
+        .eq('active', true);
+
+      if (healErr) {
+        console.error('[USE] runner_injury heal error:', healErr.message);
+      }
     } else {
-      // Encolar consumible normal
+      // Insertar en consumable_queue → el juego lo consume
       const { error: queueErr } = await supabase
         .from('consumable_queue')
         .insert({
@@ -182,17 +199,27 @@ app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
           user_id:     user.id,
           twitch_name: user.twitch_name,
         });
-      if (queueErr) console.error('[USE] consumable_queue error:', queueErr.message);
 
-      // Notificar al HUD
+      if (queueErr) {
+        console.error('[USE] consumable_queue error:', queueErr.message);
+      }
+
+      // Insertar en runner_events → el HUD reacciona en tiempo real
       const eventType = item.effect_type === 'drink' ? 'drink' : item.effect_type ?? 'item';
       const { error: eventErr } = await supabase
         .from('runner_events')
         .insert({
           type: eventType,
-          data: { item_id: item.id, effect_type: item.effect_type, twitch_name: user.twitch_name },
+          data: {
+            item_id:     item.id,
+            effect_type: item.effect_type,
+            twitch_name: user.twitch_name,
+          },
         });
-      if (eventErr) console.error('[USE] runner_events error:', eventErr.message);
+
+      if (eventErr) {
+        console.error('[USE] runner_events error:', eventErr.message);
+      }
     }
 
     // ── 6. Log ────────────────────────────────────────────────────────────────
@@ -218,21 +245,6 @@ app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
     return res.status(500).json({ error: 'Error interno al procesar el uso' });
   }
 });
-
-// ── GET /extension/injuries ───────────────────────────────────────────────────
-app.get('/extension/injuries', verifyTwitchJWT, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('runner_injury')
-      .select('id, zone, severity, speed_penalty')
-      .eq('active', true)
-    if (error) throw error
-    return res.json({ injuries: data || [] })
-  } catch (err) {
-    console.error('[GET /injuries]', err.message)
-    return res.status(500).json({ error: 'Error al cargar las lesiones' })
-  }
-})
 
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
