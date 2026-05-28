@@ -107,7 +107,7 @@ app.get('/extension/balance', verifyTwitchJWT, async (req, res) => {
 app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
   const userId      = getUserId(req.twitchPayload);
   const twitchName  = getTwitchName(req.twitchPayload);
-  const { item_id, injury_id } = req.body;
+  const { item_id, injury_id, injury_zone, injury_severity } = req.body;
 
   if (!item_id) {
     return res.status(400).json({ error: 'Falta item_id' });
@@ -171,7 +171,15 @@ app.post('/extension/use', verifyTwitchJWT, async (req, res) => {
       // Notificar al HUD
       await supabase.from('runner_events').insert({
         type: 'heal',
-        data: { item_id: item.id, effect_type: item.effect_type, injury_id, twitch_name: user.twitch_name },
+        data: {
+          item_id:    item.id,
+          item_name:  item.name,
+          effect_type: item.effect_type,
+          injury_id,
+          zone:       injury_zone     || null,
+          severity:   injury_severity || null,
+          twitch_name: user.twitch_name,
+        },
       });
     } else {
       // Encolar consumible normal
