@@ -330,6 +330,64 @@
   .skel-img  { width: 100%; aspect-ratio: 1; background: var(--bg3); border-radius: 10px; }
   .skel-line { height: 10px; background: var(--bg3); border-radius: 99px; margin-top: 6px; }
   .skel-line.short { width: 60%; }
+
+  /* ── MODAL LESIONES ── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.72);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; padding: 16px;
+  }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%; max-width: 310px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-title { font-family: var(--font); font-size: 16px; font-weight: 700; color: var(--text); }
+  .modal-close {
+    background: none; border: none; color: var(--text-dim);
+    font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .modal-desc { padding: 10px 16px 6px; font-size: 12px; color: var(--text-dim); font-weight: 600; line-height: 1.4; }
+  .modal-empty { padding: 20px 16px; text-align: center; color: var(--text-dim); font-size: 13px; font-weight: 600; }
+  .injury-list { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; }
+  .injury-option {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+    cursor: pointer; width: 100%; text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .injury-option:hover { background: rgba(255,51,68,0.07); border-color: rgba(255,51,68,0.3); }
+  .injury-option.grave:hover { background: rgba(255,51,68,0.1); border-color: rgba(255,51,68,0.48); }
+  .inj-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .inj-dot.leve  { background: #f5c97a; box-shadow: 0 0 5px rgba(245,201,122,0.5); }
+  .inj-dot.grave { background: #ff4455; box-shadow: 0 0 5px rgba(255,68,85,0.5); }
+  .inj-info { flex: 1; }
+  .inj-zone { font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--text); }
+  .inj-sev  { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; margin-top: 1px; }
+  .injury-option.leve  .inj-sev { color: var(--accent); }
+  .injury-option.grave .inj-sev { color: #ff6677; }
+  .inj-pen { font-size: 11px; font-weight: 700; color: #ff6677; }
+  .inj-arrow { color: var(--text-dim); font-size: 14px; }
+  .modal-footer { padding: 10px 16px 14px; border-top: 1px solid var(--border); }
+  .btn-cancel {
+    width: 100%; background: transparent;
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+    font-family: var(--font); font-size: 13px; font-weight: 600;
+    color: var(--text-dim); cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-cancel:hover { background: rgba(255,255,255,0.04); color: var(--text); }
 </style>
 </head>
 <body>
@@ -375,6 +433,22 @@
       <div class="skel-img"></div>
       <div class="skel-line"></div>
       <div class="skel-line short"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Modal selección de lesión -->
+<div class="modal-backdrop" id="injury-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">¿Qué lesión tratar?</div>
+      <button class="modal-close" onclick="closeInjuryModal()">✕</button>
+    </div>
+    <div class="modal-desc" id="modal-desc"></div>
+    <div id="injury-list-wrap"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeInjuryModal()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -470,6 +544,19 @@ async function loadBalance() {
   }
 }
 
+const ZONE_LABELS = {
+  'pie_izq':'Pie izquierdo','pie_der':'Pie derecho','pie':'Pie',
+  'tobillo_izq':'Tobillo izq.','tobillo_der':'Tobillo der.','tobillo':'Tobillo',
+  'pantorrilla_izq':'Pantorrilla izq.','pantorrilla_der':'Pantorrilla der.','pantorrilla':'Pantorrilla',
+  'rodilla_izq':'Rodilla izq.','rodilla_der':'Rodilla der.','rodilla':'Rodilla',
+  'muslo_izq':'Muslo izquierdo','muslo_der':'Muslo derecho','muslo':'Muslo',
+  'cadera':'Cadera','espalda_baja':'Espalda baja','espalda':'Espalda',
+  'hombro_izq':'Hombro izq.','hombro_der':'Hombro der.','hombro':'Hombro',
+  'brazo_izq':'Brazo izquierdo','brazo_der':'Brazo derecho','brazo':'Brazo',
+};
+
+let pendingHealItem = null;
+
 async function buyItem(item) {
   const card = document.querySelector(`[data-id="${item.id}"]`);
   if (!card) return;
@@ -481,34 +568,97 @@ async function buyItem(item) {
     return;
   }
 
-  card.classList.add('buying');
+  // Ítems de curación: mostrar selector de lesión primero
+  if (item.effect_type === 'heal_leve' || item.effect_type === 'heal_grave') {
+    await openInjuryModal(item);
+    return;
+  }
+
+  await executeUse(item, null);
+}
+
+async function openInjuryModal(item) {
+  pendingHealItem = item;
+  setStatus('loading', 'Cargando lesiones...');
+
+  let injuries = [];
+  try {
+    const data = await apiFetch('/extension/injuries');
+    injuries = data.injuries || [];
+  } catch (e) {
+    showToast('Error al cargar lesiones', 'error');
+    setStatus('online', 'Tienda lista');
+    return;
+  }
+  setStatus('online', 'Tienda lista');
+
+  const severity = item.effect_type === 'heal_leve' ? 'leve' : 'grave';
+  const eligible = injuries.filter(i => i.severity === severity);
+
+  // Título y descripción
+  document.getElementById('modal-title').textContent = `${item.icon || '💊'} ¿Qué lesión tratar?`;
+  document.getElementById('modal-desc').innerHTML = item.effect_type === 'heal_leve'
+    ? 'Este ítem solo cura lesiones <b>leves</b>.'
+    : 'Este ítem solo cura lesiones <b>graves</b>.';
+
+  const wrap = document.getElementById('injury-list-wrap');
+  if (eligible.length === 0) {
+    wrap.innerHTML = `<div class="modal-empty">No hay lesiones ${severity}s activas ahora mismo.</div>`;
+  } else {
+    wrap.innerHTML = `<div class="injury-list">${eligible.map(inj => `
+      <button class="injury-option ${inj.severity}" onclick="confirmHeal(${inj.id})">
+        <div class="inj-dot ${inj.severity}"></div>
+        <div class="inj-info">
+          <div class="inj-zone">${ZONE_LABELS[inj.zone] || inj.zone}</div>
+          <div class="inj-sev">${inj.severity.toUpperCase()}</div>
+        </div>
+        ${inj.speed_penalty > 0 ? `<div class="inj-pen">-${inj.speed_penalty.toFixed(2)} M/S</div>` : ''}
+        <div class="inj-arrow">→</div>
+      </button>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('injury-modal').style.display = 'flex';
+}
+
+function closeInjuryModal() {
+  document.getElementById('injury-modal').style.display = 'none';
+  pendingHealItem = null;
+}
+
+async function confirmHeal(injuryId) {
+  closeInjuryModal();
+  if (!pendingHealItem) return;
+  await executeUse(pendingHealItem, injuryId);
+}
+
+async function executeUse(item, injuryId) {
+  const card = document.querySelector(`[data-id="${item.id}"]`);
+  if (card) card.classList.add('buying');
   setStatus('loading', `Usando ${item.name}...`);
 
   try {
+    const body = { item_id: item.id };
+    if (injuryId) body.injury_id = injuryId;
+
     const data = await apiFetch('/extension/use', {
       method: 'POST',
-      body: JSON.stringify({ item_id: item.id }),
+      body: JSON.stringify(body),
     });
 
-    // Actualizar saldo
     setBalance(data.balance);
-
-    // Cooldown local de 3s mínimo para evitar spam
     cooldowns[item.id] = Date.now() + (item.cooldown_ms || 3000);
 
-    showFeedback(card, 'success', '✓');
+    if (card) showFeedback(card, 'success', '✓');
     showToast(`✨ ¡${item.name} usado!`, 'success');
     setStatus('online', 'Tienda lista');
-
-    // Refrescar saldo tras un momento
     setTimeout(loadBalance, 1500);
   } catch (e) {
-    showFeedback(card, 'error', '✗');
+    if (card) showFeedback(card, 'error', '✗');
     showToast(e.message || 'No se pudo usar el ítem', 'error');
     setStatus('online', 'Tienda lista');
   } finally {
-    card.classList.remove('buying');
-    // Actualizar estado de botones según nuevo saldo
+    if (card) card.classList.remove('buying');
     updateAffordability();
   }
 }
